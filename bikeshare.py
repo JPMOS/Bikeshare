@@ -24,8 +24,3 @@ print(bikes[0:4,0:4])
 sns.pairplot(train)
 plt.show()
 
-pd.isna
-??pandas.isna
-
-A = np.random.rand(3,3)
-eigenvals, eigenvecs = np.linalg.eig(A)
