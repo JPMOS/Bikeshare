@@ -247,39 +247,6 @@ preds = rf_fit.predict(Train_Val)
 rmsle1(preds, y_count_val)
 preds = rf_fit.predict(Test)
 preds
-# GBR 
-
-scores_enet = cross_val_score(modelenet, Train, np.log1p(y_count), cv=5, scoring = rmsle_scorer)
-
-param_dist = {"max_depth": [3, None],
-              "max_features": sp_randint(1, 11),
-              "min_samples_split": sp_randint(2, 11),
-              "min_samples_leaf": sp_randint(1, 11),
-              "bootstrap": [True, False],
-              "criterion": ["gini", "entropy"]}
-
-# run randomized search
-
-print(sp_rand(10))
-n_iter_search = 20
-grid = RandomizedSearchCV(clf, param_distributions = {"alpha" : uniform(), "l1_ratio" : 0 },
-                                   n_iter= 20, scoring = rmsle_scorer)
-
-random_search.fit(Train, y_count)
-
-train
-gbm = GradientBoostingRegressor(n_estimators=4000,alpha=0.01)
-gbm.fit(X = Train,y = np.log1p(y_count))
-preds = gbm.predict(X = Test)
-
-
-print ("RMSLE Value: ", rmsle(Y_validate,np.exp(preds)))
-
-modelenet = RandomizedSearchCV()
-
-
-
-scores = cross_validate(lasso, Train, y_count, scoring=('rmsle'))
 
 
 # Prediction 
