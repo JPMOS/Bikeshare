@@ -11,15 +11,20 @@ from mlens.metrics import make_scorer
 from mlens.metrics.metrics import rmse
 from mlens.ensemble import SuperLearner
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, ElasticNetCV
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.linear_model import ElasticNet
+from sklearn.ensemble import GradientBoostingRegressor
 
-from sklearn import cross_validation as CV
+from sklearn.model_selection import RandomizedSearchCV, cross_val_score, cross_val_predict
 from sklearn.linear_model import LogisticRegression as LR
+from sklearn.linear_model import 
 from sklearn.ensemble import RandomForestClassifier as RF
 from sklearn.metrics import roc_auc_score as AUC
+
+from scipy.stats import uniform 
 
 #############################################################################
 #      L O A D      D A T A     &    P R E P A R E
@@ -51,17 +56,16 @@ y = data.is_test
 from sklearn.cross_validation import train_test_split
 x_train, x_test, y_train, y_test = train_test_split(x, y, train_size = .9 )
 
+x_test
+x_test.dtypes
+
 # What types are the variables 
 bikes.dtypes
 # Categorical = Season, holiday, workingday, weather...
 
-for col in ["season", "holiday", "workingday", "weather"]:
-    bikes[col] = bikes[col].astype('category')
-
-
 # Note, test has 3 more columns than test.
 # This is because casual + registered = count 
-# Count is the column we are trying to predict.
+# Count is the column wer are trying to predict.
 # I don't know why casual and registered are there.
 
 
@@ -96,10 +100,8 @@ sns.boxplot(data = numeric_vars )
 #----------------------------
 
 # --- RF ---
-print "training random forest..."
 
-n_estimators = 100
-clf = RF(n_estimators = n_estimators, n_jobs = -1, verbose = True )
+clf = RF(n_estimators = 100, verbose = True )
 clf.fit(x_train, y_train)
 
 # predict
@@ -124,11 +126,11 @@ train_sorted['p'] = clf.predict_proba(train_sorted)[:,1]
 train_sorted = pd.concat([train_sorted, train[['datetime','count']]], axis = 1)
 
 train_sorted.sort_values('p', ascending= False, inplace= True)
-
-train_sorted = train_sorted.iloc[0:9799, ] # drop .10 least likely to be in test. 
-train_sorted.drop("p", axis = 1, inplace= True)
+train_sorted.head
 
 bikes = pd.concat([train_sorted, test])
+
+train_sorted.to_csv("train_sorted.csv")
 
 #############################################################################
 #      F E A T U R E       E N G I N E E R I N G
@@ -141,82 +143,161 @@ bikes = pd.concat([train_sorted, test])
 # While we are at it we should do day of year, day of month, month of year!
 
 date = pd.DatetimeIndex(bikes['datetime'])
-bikes['hour']      = date.time
+bikes['hour']      = date.hour
 bikes["day.week"]  = date.dayofweek
 bikes["day.month"] = date.day
 bikes["month.year"]= date.month
 
+bikes.dtypes
+
+for col in ["season", "holiday", "workingday", "weather", "hour", "day.week", "day.month", "month.year"]:
+    bikes[col] = bikes[col].astype('category')
 
 
-
-
-
-dropping = ['casual', 'registered']
-bikes.drop(dropping,  axis = 1, inplace = True)
-
-bikes.head()
-
+bikes.describe()
 # Put them back together for training and testing.
 
-Train = bikes[pd.notnull(bikes['count'])].sort_values(by=["datetime"])
-Test = bikes[~pd.notnull(bikes['count'])].sort_values(by=["datetime"])
+train_sorted =  # drop .10 least likely to be in test. 
+train_sorted.drop("p", axis = 1, inplace= True)
+
+
+Work = bikes[pd.notnull(bikes['count'])]
+Train = Work.iloc[0:9799, ]
+Train_Val = Work.iloc[9800:10886,]
+Test = bikes[~pd.notnull(bikes['count'])]
 
 y_count = Train["count"]
+y_count_val = Train_Val["count"]
 
-features_to_drop  = ["count","datetime","date"]
+Test_Datetime = Test["datetime"]
+
+features_to_drop  = ["count", "datetime", "p"]
 Train.drop(features_to_drop,axis=1, inplace= True)
+Train_Val.drop(features_to_drop,axis=1, inplace= True)
 Test.drop(features_to_drop,axis=1, inplace=  True)
 
- # What we are trying to predict! 
+# What we are trying to predict! 
 
 Train.dtypes
 Train.head
+numeric = ["atemp","humidity", "temp", "windspeed"]
+normalized_df = (Train[numeric] - Train[numeric].min())/(Train[numeric].max() -Train[numeric].min())
 
 #############################################################################
 #     T R A I N 
 #############################################################################
 
-def rmsle(y, y0):
+def rmsle1(y, y0):
     assert len(y) == len(y0)
     return np.sqrt(np.mean(np.power(np.log1p(y)-np.log1p(y0), 2)))
+    
+def rmsle2(y, y_, convertExp=False):
+    if convertExp:
+        y = np.exp(y),
+        y_ = np.exp(y_)
+    log1 = np.nan_to_num(np.array([np.log(v + 1) for v in y]))
+    log2 = np.nan_to_num(np.array([np.log(v + 1) for v in y_]))
+    calc = (log1 - log2) ** 2
+    return np.sqrt(np.mean(calc))
 
 
 # --- Models --- 
-model.svm = SVR(kernel='linear', C=1)
-model.enet
-model.knn
+model_svm = SVR(kernel='linear', C=1)
+model_enet = ElasticNet(random_state=0)
+model_rf = RandomForestRegressor()
+model_knn = KNeighborsRegressor()
+model_xgb = GradientBoostingRegressor()
+
 
 
 
 # --- C V ---
 from sklearn.model_selection import cross_val_score
+from sklearn.metrics import mean_squared_log_error
+
+# ENET
+
+modelenet = ElasticNetCV(cv = 10)
+ENET_fit = modelenet.fit(Train, np.log1p(y_count))
+preds = ENET_fit.predict(Train_Val)
+rmsle1(np.exp(preds), y_count_val)
 
 
-scores.svm = cross_val_score(clf, iris.data, iris.target, cv=5)
+# RF
+n_estimators = [int(x) for x in np.linspace(start = 200, stop = 2000, num = 10)]
+max_features = ['auto', 'sqrt']
+max_depth = [int(x) for x in np.linspace(10, 110, num = 11)]
+max_depth.append(None)
+min_samples_split = [2, 5, 10]
+min_samples_leaf = [1, 2, 4]
+bootstrap = [True, False]
 
-scores = cross_validate(lasso, X, y,
-...                         scoring=('r2', 'neg_mean_squared_error'))
+random_grid = {'n_estimators': n_estimators,
+               'max_features': max_features,
+               'max_depth': max_depth,
+               'min_samples_split': min_samples_split,
+               'min_samples_leaf': min_samples_leaf,
+               'bootstrap': bootstrap}
+
+model_rf = RandomizedSearchCV(estimator= model_rf, param_distributions=random_grid, n_iter=100, cv=3, 
+                                verbose = 2, random_state = 42, n_jobs = -1)
+
+rf_fit = model_rf.fit(Train, y_count)
+preds = rf_fit.predict(Train_Val)
+rmsle1(preds, y_count_val)
+preds = rf_fit.predict(Test)
+preds
+# GBR 
+
+scores_enet = cross_val_score(modelenet, Train, np.log1p(y_count), cv=5, scoring = rmsle_scorer)
+
+param_dist = {"max_depth": [3, None],
+              "max_features": sp_randint(1, 11),
+              "min_samples_split": sp_randint(2, 11),
+              "min_samples_leaf": sp_randint(1, 11),
+              "bootstrap": [True, False],
+              "criterion": ["gini", "entropy"]}
+
+# run randomized search
+
+print(sp_rand(10))
+n_iter_search = 20
+grid = RandomizedSearchCV(clf, param_distributions = {"alpha" : uniform(), "l1_ratio" : 0 },
+                                   n_iter= 20, scoring = rmsle_scorer)
+
+random_search.fit(Train, y_count)
+
+train
+gbm = GradientBoostingRegressor(n_estimators=4000,alpha=0.01)
+gbm.fit(X = Train,y = np.log1p(y_count))
+preds = gbm.predict(X = Test)
 
 
-# --- Build ---
-# Passing a scoring function will create cv scores during fitting
-# the scorer should be a simple function accepting to vectors and returning a scalar
-ensemble = SuperLearner(scorer= rmsle, random_state = 42, verbose=2)
+print ("RMSLE Value: ", rmsle(Y_validate,np.exp(preds)))
 
-# Build the first layer
-ensemble.add([RandomForestRegressor(random_state=42),
-                    KNeighborsRegressor(), LinearRegression()])
+modelenet = RandomizedSearchCV()
 
-# Attach the final meta estimator
-ensemble.add_meta(LinearRegression())
 
-# --- Use ---
 
-# Fit ensemble
-ensemble.fit(Train)
+scores = cross_validate(lasso, Train, y_count, scoring=('rmsle'))
 
-# Predict
-preds = ensemble.predict(X[75:])
 
-print("Fit data:\n%r" % ensemble.data)
+# Prediction 
+
+prediction1 = pd.DataFrame({"datetime": Test_Datetime, "count": np.exp(preds)})
+cols = prediction1.columns.tolist()
+cols = cols[-1:] + cols[:-1]
+prediction1 = prediction1[cols]
+prediction1.head
+prediction1.to_csv("Prediction1.csv", index = False)
+
+scipy.stats
+
+prediction1 = pd.DataFrame({"datetime": Test_Datetime, "count": np.exp(preds)})
+cols = prediction1.columns.tolist()
+cols = cols[-1:] + cols[:-1]
+prediction1 = prediction1[cols]
+prediction1.head
+prediction1.to_csv("Prediction2.csv", index = False)
+
 
