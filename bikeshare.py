@@ -260,7 +260,7 @@ prediction1.to_csv("Prediction1.csv", index = False)
 
 scipy.stats
 
-prediction1 = pd.DataFrame({"datetime": Test_Datetime, "count": np.exp(preds)})
+prediction1 = pd.DataFrame({"datetime": Test_Datetime, "count": preds})
 cols = prediction1.columns.tolist()
 cols = cols[-1:] + cols[:-1]
 prediction1 = prediction1[cols]
